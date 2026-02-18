@@ -1,0 +1,29 @@
+Package: SAMutils
+Type: Package
+Title: Utilities for SAM Model Workflows
+Version: 0.0.0.9000
+Authors@R: person(given = "SAMutils", family = "Authors", email = "samutils@example.com", role = c("aut", "cre"))
+Author: SAMutils Authors [aut, cre]
+Maintainer: SAMutils Authors <samutils@example.com>
+Description: Helper functions for preparing inputs, fitting models,
+    and producing diagnostics around stockassessment (SAM) workflows.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.1.0)
+Imports:
+    dplyr,
+    ggplot2,
+    patchwork,
+    purrr,
+    readr,
+    scales,
+    stockassessment,
+    tibble,
+    tidyr,
+    tidypax
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
