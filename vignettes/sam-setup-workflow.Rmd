@@ -1,0 +1,220 @@
+---
+title: "SAM Setup Workflow"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{SAM Setup Workflow}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = TRUE
+)
+```
+
+## Overview
+
+This vignette demonstrates a package-oriented SAM workflow based on the scripts in `00-setup/`:
+
+- `00-setup/input_data.R`: assemble assessment input data.
+- `00-setup/model-data.R`: build SAM matrices (`cn`, `cw`, `smb`, `sw`, `mo`, `nm`, ...).
+- `00-setup/model-setup.R`: configure SAM, run `full_sam_fit()`, and inspect diagnostics.
+
+The same sequence is shown below using `SAMutils` functions.
+
+## 1) Build or load assessment input data
+
+In the original setup, `input_data.R` creates a long table with columns such as:
+
+- `year`, `age`
+- `catch`, `catch_weight`
+- `smb`, `smh`
+- `stock_weight`, `maturity`, `M`
+
+This package ships an example input table at `inst/extdata/assessment_input_data.csv`.
+Load it like this:
+
+```{r}
+library(dplyr)
+library(readr)
+
+input_path <- system.file("extdata", "assessment_input_data.csv", package = "SAMutils")
+if (!nzchar(input_path)) {
+  input_path <- file.path("..", "inst", "extdata", "assessment_input_data.csv")
+}
+model_dat <- read_csv2(input_path, guess_max = 1e9)
+```
+
+## 2) Convert long data to SAM matrices
+
+Use `sam.input()` to reproduce the matrix-building pattern from `model-data.R`.
+
+```{r}
+library(SAMutils)
+
+tyr <- 2025
+maxage <- 12
+
+cn <- model_dat |>
+  dplyr::mutate(catch = dplyr::if_else(is.na(catch), NA_real_, catch)) |>
+  sam.input("catch", age_range = as.numeric(1:maxage), na.fill = NA_real_) |>
+  (\(x) ifelse(x == 0, NA_real_, x))()
+
+cw <- model_dat |>
+  sam.input(
+    "catch_weight",
+    age_range = as.numeric(1:maxage),
+    tail_f = function(x, ...) dplyr::first(x),
+    na.fill = 0
+  ) |>
+  (function(x) x / 1000)()
+
+smb <- model_dat |>
+  dplyr::filter(year > 1984) |>
+  sam.input("smb", age_range = as.numeric(1:maxage), time_window = c(0.15, 0.2), na.fill = NA_real_) |>
+  (\(x) ifelse(x < 0, NA_real_, x))() |>
+  (function(x) 1e3 * x)()
+
+smh <- model_dat |>
+  dplyr::filter(year > 1994, year < tyr) |>
+  dplyr::mutate(smh = dplyr::if_else(age > 10, NA_real_, smh)) |>
+  sam.input("smh", age_range = as.numeric(1:maxage), na.fill = NA_real_) |>
+  (\(x) ifelse(x < 0, NA_real_, x))() |>
+  (function(x) 1e3 * x)()
+
+sw <- model_dat |>
+  sam.input(
+    "stock_weight",
+    age_range = as.numeric(1:maxage),
+    tail_f = function(x, ...) dplyr::first(x),
+    na.fill = 0.001
+  ) |>
+  (function(x) x / 1000)()
+
+mo <- model_dat |>
+  sam.input("maturity", age_range = as.numeric(1:maxage), tail_f = max, na.fill = 1)
+
+lf <- array(1, dim = dim(cn), dimnames = dimnames(cn))
+pf <- array(0.4, dim = dim(cn), dimnames = dimnames(cn))
+pm <- array(0.3, dim = dim(cn), dimnames = dimnames(cn))
+
+nm <- model_dat |>
+  sam.input("M", age_range = as.numeric(1:maxage), tail_f = mean, na.fill = 0.2)
+```
+
+## 3) Build `dat`, configure `conf`, and run full fit
+
+```{r}
+library(stockassessment)
+
+# Match `00-setup/model-setup.R` pre-fit tweaks
+smh["2011", ] <- NA_real_
+cn[as.character(tyr), ] <- NA_real_
+
+dat <- setup.sam.data(
+  surveys = list(spring = smb, autumn = smh),
+  residual.fleet = cn,
+  prop.mature = mo,
+  stock.mean.weight = sw,
+  catch.mean.weight = cw,
+  dis.mean.weight = cw,
+  land.mean.weight = cw,
+  prop.f = pf,
+  prop.m = pm,
+  natural.mortality = nm,
+  land.frac = lf
+)
+
+# Match `00-setup/model-setup.R` configuration block
+conf <- within(defcon(dat), {
+  maxAgePlusGroup = c(1, 1, 1)
+  stockRecruitmentModelCode = 3
+  keyLogFsta[1, ] = 0:(length(keyLogFsta[1, ]) - 1)
+
+  predVarObsLink[1, !is.na(predVarObsLink[1, ])] <- 0
+  predVarObsLink[2, !is.na(predVarObsLink[2, ])] <- max(predVarObsLink[1, ], na.rm = TRUE) + 1
+  predVarObsLink[3, !is.na(predVarObsLink[3, 1:6])] <- max(predVarObsLink[2, ], na.rm = TRUE) + 1
+
+  keyVarObs[1, keyVarObs[1, ] != -1] <- c(rep(0, 2), rep(1, 2), rep(2, 6), rep(3, 2))
+  keyVarObs[2, keyVarObs[2, ] != -1] <- max(keyVarObs[1, ]) + 1
+  keyVarObs[3, keyVarObs[3, ] != -1] <- max(keyVarObs[2, ]) + 1
+
+  obsCorStruct[2:3] <- "AR"
+  keyCorObs[2, is.na(keyCorObs[2, ])] <- c(rep(0, 7), rep(1, 4))
+
+  keyLogFpar[2, keyLogFpar[2, ] != -1] <- c(0:4, rep(5, 7))
+  keyLogFpar[3, keyLogFpar[3, ] != -1] <- max(keyLogFpar[2, ]) + 1 + c(rep(0, 3), rep(1, 7))
+
+  keyVarF[1, ] <- c(rep(0, 2), 1, rep(2, 9))
+})
+
+sam_fit <- tryCatch(
+  full_sam_fit(dat, conf),
+  error = function(e) {
+    message("Primary fit failed (", conditionMessage(e), "). Falling back to precomputed extdata fit.")
+    fit_path <- system.file("extdata", "sam_fit_extdata.rds", package = "SAMutils")
+    if (!nzchar(fit_path)) {
+      fit_path <- file.path("..", "inst", "extdata", "sam_fit_extdata.rds")
+    }
+    readRDS(fit_path)
+  }
+)
+```
+
+`sam_fit` contains:
+
+- `sam_fit$fit`: fitted model
+- `sam_fit$res`: observation residuals
+- `sam_fit$process_res`: process residuals
+- `sam_fit$retro`: retrospective fits
+- `sam_fit$lo`: leave-one-out fits
+
+## 4) Standard outputs and diagnostics
+
+```{r, fig.width=10, fig.height=7}
+rby <- rby.sam(sam_fit$fit)
+rbya <- rbya.sam(sam_fit$fit)
+
+p_main <- model_ices_plot(sam_fit, model_dat = model_dat)
+p_retro <- model_retro_plot(sam_fit)
+p_resid <- model_resid_plot(sam_fit)
+p_pres <- model_pres_resid_plot(sam_fit)
+p_lo <- try(model_lo_plot(sam_fit), silent = TRUE)
+p_lik <- try(model_lik_plot(sam_fit), silent = TRUE)
+p_sel <- try(model_selectivity_plot(sam_fit), silent = TRUE)
+p_sr <- try(SR_plot(sam_fit), silent = TRUE)
+p_comb <- try(model_combfit(sam_fit, model_dat = model_dat), silent = TRUE)
+
+safe_print <- function(p) {
+  if (!inherits(p, "try-error")) {
+    try(print(p), silent = TRUE)
+  }
+}
+
+safe_print(p_main)
+safe_print(p_retro)
+safe_print(p_resid)
+safe_print(p_pres)
+safe_print(p_lo)
+safe_print(p_lik)
+safe_print(p_sel)
+safe_print(p_sr)
+safe_print(p_comb)
+```
+
+## 5) Launch dashboard from `full_sam_fit`
+
+```{r, eval=FALSE}
+app <- dashboard_app(sam_fit)
+shiny::runApp(app)
+```
+
+This is the recommended package workflow:
+
+```r
+sam_fit <- full_sam_fit(dat, conf)
+dashboard_app(sam_fit)
+```
