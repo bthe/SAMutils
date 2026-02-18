@@ -327,7 +327,7 @@ input_data_plot <- function(dat) {
     ggplot2::geom_line() +
     ggplot2::geom_text() +
     ggplot2::facet_wrap(~variable, scales = 'free_y') +
-    theme(legend.position = 'none') +
+    ggplot2::theme(legend.position = 'none') +
     tidypax::scale_col_crayola()
 }
 
@@ -349,7 +349,7 @@ rbya.sam <- function(
     to_num <- function(v) suppressWarnings(as.numeric(as.character(v)))
     x |>
       as.data.frame.table(stringsAsFactors = FALSE, responseName = value_name) |>
-      rename(year = Var1, age = Var2) |>
+      dplyr::rename(year = Var1, age = Var2) |>
       dplyr::mutate(year = to_num(year), age = to_num(age)) |>
       tibble::as_tibble()
   }
@@ -362,7 +362,7 @@ rbya.sam <- function(
         stockassessment::faytable() |>
         as.data.frame.table(stringsAsFactors = FALSE, responseName = 'f')
     ) |>
-    rename(year = Var1, age = Var2) |>
+    dplyr::rename(year = Var1, age = Var2) |>
     dplyr::mutate(year = suppressWarnings(as.numeric(year)), age = suppressWarnings(as.numeric(age))) |>
     tibble::as_tibble()
 
@@ -932,7 +932,7 @@ profile_infect_M_run <- function(
 
   infect_m <-
     infection_dat |>
-    rename(
+    dplyr::rename(
       year = !!rlang::sym(infection_year_col),
       age = !!rlang::sym(infection_age_col),
       infection = !!rlang::sym(infection_value_col)
@@ -1050,7 +1050,7 @@ model_data_plot <-
       ggplot2::geom_point(alpha = 0.5) +
       ggplot2::scale_size_area() +
       ggplot2::labs(x = "Year", y = "Data source") +
-      theme(legend.position = "none")
+      ggplot2::theme(legend.position = "none")
   }
 
 #' Plot Main SAM Time-Series with Optional Observed Catch Overlay
@@ -1157,24 +1157,24 @@ model_lo_plot <-
   function(res) {
     lo_rby <-
       res$lo |>
-      purrr::map(rby.sam) %>%
+      purrr::map(rby.sam) |>
       dplyr::bind_rows(.id = 'lo')
 
-    lo_rby %>%
-      dplyr::filter(variable != 'tsb') %>%
-      #dplyr::left_join(lnd_dat %>% dplyr::mutate(variable = 'Catch'),by=c('year','variable')) %>%
+    lo_rby |>
+      dplyr::filter(variable != 'tsb') |>
+      #dplyr::left_join(lnd_dat |> dplyr::mutate(variable = 'Catch'),by=c('year','variable')) |>
       ggplot2::ggplot(ggplot2::aes(year, median)) +
       ggplot2::geom_ribbon(
         ggplot2::aes(ymin = lower, ymax = upper),
         alpha = 0.5,
         fill = 'lightblue',
-        data = rby.sam(res$fit) %>%
+        data = rby.sam(res$fit) |>
           dplyr::filter(variable != 'tsb')
       ) +
       ggplot2::geom_line(ggplot2::aes(col = lo)) +
       #  ggplot2::geom_point(ggplot2::aes(y=total_landings),col='black') +
       ggplot2::geom_line(
-        data = rby.sam(res$fit) %>% dplyr::filter(variable != 'tsb'),
+        data = rby.sam(res$fit) |> dplyr::filter(variable != 'tsb'),
         col = 'black'
       ) +
       ggplot2::facet_wrap(~variable, scales = 'free_y') +
@@ -1253,7 +1253,7 @@ model_combfit <-
       colors <- scales::hue_pal()(length(unique(format_sam_res(res$res)$fleet)))
     }
 
-    res$res %>%
+    res$res |>
       format_sam_res() |>
       dplyr::filter(year > min_year, residual != 0, !(fleet %in% excluded_fleets)) |>
       dplyr::mutate(
@@ -1274,7 +1274,7 @@ model_combfit <-
       ggplot2::geom_line(ggplot2::aes(y = pred)) +
       ggplot2::scale_colour_manual(values = colors) +
       ggplot2::labs(col = '', y = 'Survey index', x = 'Year') +
-      theme(legend.position = c(0.2, 0.8), legend.background = element_blank())
+      ggplot2::theme(legend.position = c(0.2, 0.8), legend.background = ggplot2::element_blank())
   }
 
 #' Plot Survey Index Fits by Fleet and Age
@@ -1284,12 +1284,12 @@ model_combfit <-
 #' @return A ggplot object.
 model_sifit_plot <-
   function(res) {
-    res$res %>%
+    res$res |>
       format_sam_res() |>
-      dplyr::filter(year > min(year) + 1, residual != 0) %>%
+      dplyr::filter(year > min(year) + 1, residual != 0) |>
       ggplot2::ggplot(ggplot2::aes(year, observation)) +
       ggplot2::geom_point() +
-      facet_grid(age ~ fleet, scales = 'free_y') +
+      ggplot2::facet_grid(age ~ fleet, scales = 'free_y') +
       ggplot2::geom_line(ggplot2::aes(y = mean))
   }
 
@@ -1308,48 +1308,50 @@ model_lik_plot <-
       cor_fit
     }
 
-    annotated_par_table(cor_fit) %>%
-      dplyr::filter(grepl('transfIRARdist', par_name)) %>%
-      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) %>% as.numeric()) %>%
+    p1 <- annotated_par_table(cor_fit) |>
+      dplyr::filter(grepl('transfIRARdist', par_name)) |>
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
       ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
       tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated correlation') +
+      ggplot2::labs(y = 'Estimated correlation')
 
-      annotated_par_table(res$fit) |>
-        dplyr::filter(grepl('SdLogObs', par_name)) %>%
-        dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) %>% as.numeric()) %>%
-        ggplot2::ggplot(ggplot2::aes(age, est)) +
+    p2 <- annotated_par_table(res$fit) |>
+      dplyr::filter(grepl('SdLogObs', par_name)) |>
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
+      ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
-      ggplot2::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated predvar link alpha') +
+      tidypax::scale_col_crayola() +
+      ggplot2::labs(y = 'Estimated predvar link alpha')
 
-      annotated_par_table(res$fit) |>
-        dplyr::filter(grepl('predVar', par_name)) %>%
-        dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) %>% as.numeric()) %>%
-        ggplot2::ggplot(ggplot2::aes(age, est)) +
+    p3 <- annotated_par_table(res$fit) |>
+      dplyr::filter(grepl('predVar', par_name)) |>
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
+      ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
-      ggplot2::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated predvar link alpha') +
+      tidypax::scale_col_crayola() +
+      ggplot2::labs(y = 'Estimated predvar link alpha')
 
-      annotated_par_table(res$fit) %>%
-        dplyr::filter(grepl('LogN|Fsta_', par_name)) %>%
-        dplyr::mutate(
-          fleet = dplyr::case_when(
-            grepl('LogN', par_name) ~ 'sd(log(N))',
-            TRUE ~ 'sd(log(F))'
-          ),
-          age = gsub('(.+)-.+', '\\1', age) %>% as.numeric()
-        ) %>%
-        ggplot2::ggplot(ggplot2::aes(age, est)) +
+    p4 <- annotated_par_table(res$fit) |>
+      dplyr::filter(grepl('LogN|Fsta_', par_name)) |>
+      dplyr::mutate(
+        fleet = dplyr::case_when(
+          grepl('LogN', par_name) ~ 'sd(log(N))',
+          TRUE ~ 'sd(log(F))'
+        ),
+        age = gsub('(.+)-.+', '\\1', age) |> as.numeric()
+      ) |>
+      ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
       ggplot2::expand_limits(y = 0) +
-      ggplot2::scale_col_crayola() +
+      tidypax::scale_col_crayola() +
       ggplot2::labs(y = 'Process variances', x = 'Age')
+
+    patchwork::wrap_plots(p1, p2, p3, p4, ncol = 1)
   }
 
 
@@ -1379,58 +1381,59 @@ model_selectivity_SR_plot <-
     stock_weight_limit = 4,
     fleet_labels = NULL
   ) {
-    res$fit |>
+    p1 <- res$fit |>
       rbya.sam() |>
       dplyr::group_by(year) |>
       dplyr::mutate(sel = f / max(f)) |>
       ggplot2::ggplot(ggplot2::aes(age, sel, col = as.ordered(year))) +
       ggplot2::geom_line() +
-      theme(legend.position = 'none') +
-      ggplot2::labs(x = 'Age', y = 'Selectivity') +
+      ggplot2::theme(legend.position = 'none') +
+      ggplot2::labs(x = 'Age', y = 'Selectivity')
 
-      res$fit |>
-        rbya.sam() |>
-        dplyr::group_by(year) |>
-        dplyr::mutate(sel = f / max(f)) |>
-        dplyr::filter(stock_weight < stock_weight_limit) |>
-        ggplot2::ggplot(ggplot2::aes(stock_weight, sel, col = as.ordered(year))) +
+    p2 <- res$fit |>
+      rbya.sam() |>
+      dplyr::group_by(year) |>
+      dplyr::mutate(sel = f / max(f)) |>
+      dplyr::filter(stock_weight < stock_weight_limit) |>
+      ggplot2::ggplot(ggplot2::aes(stock_weight, sel, col = as.ordered(year))) +
       ggplot2::geom_line() +
-      theme(legend.position = 'none') +
-      ggplot2::labs(x = 'Stock weight', y = '') +
+      ggplot2::theme(legend.position = 'none') +
+      ggplot2::labs(x = 'Stock weight', y = '')
 
-      annotated_par_table(res$fit) %>%
-        dplyr::filter(grepl('Fpar', par_name)) %>%
-        dplyr::mutate(
-          age = gsub('(.+)-.+', '\\1', age) %>% as.numeric(),
-          fleet = sam_default_fleet_label(fleet, labels = fleet_labels)
-        ) %>%
-        ggplot2::ggplot(ggplot2::aes(age, est)) +
+    p3 <- annotated_par_table(res$fit) |>
+      dplyr::filter(grepl('Fpar', par_name)) |>
+      dplyr::mutate(
+        age = gsub('(.+)-.+', '\\1', age) |> as.numeric(),
+        fleet = sam_default_fleet_label(fleet, labels = fleet_labels)
+      ) |>
+      ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
       tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Survey catchability', x = 'Age') +
+      ggplot2::labs(y = 'Survey catchability', x = 'Age')
 
-      res$fit |>
-        rby.sam() |>
-        dplyr::filter(variable %in% c('ssb', 'rec')) |>
-        dplyr::mutate(year = ifelse(variable == 'ssb', year + 1, year)) |>
-        tidyr::pivot_wider(
-          names_from = 'variable',
-          values_from = c(median, lower, upper)
-        ) |>
-        dplyr::arrange(year) |>
-        ggplot2::ggplot(ggplot2::aes(median_ssb, median_rec)) +
+    p4 <- res$fit |>
+      rby.sam() |>
+      dplyr::filter(variable %in% c('ssb', 'rec')) |>
+      dplyr::mutate(year = ifelse(variable == 'ssb', year + 1, year)) |>
+      tidyr::pivot_wider(
+        names_from = 'variable',
+        values_from = c(median, lower, upper)
+      ) |>
+      dplyr::arrange(year) |>
+      ggplot2::ggplot(ggplot2::aes(median_ssb, median_rec)) +
       ggplot2::geom_path(col = 'gray') +
       ggplot2::geom_errorbarh(ggplot2::aes(xmin = lower_ssb, xmax = upper_ssb)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower_rec, ymax = upper_rec)) +
       ggplot2::geom_text(ggplot2::aes(label = year), col = 'red') +
-      ggplot2::labs(y = 'Recruitment', y = 'SSB') +
+      ggplot2::labs(y = 'Recruitment', y = 'SSB')
 
-      patchwork::plot_layout(
-        design = "AB
+    patchwork::wrap_plots(
+      A = p1, B = p2, C = p3, D = p4,
+      design = "AB
 CC
 DD"
-      )
+    )
   }
 
 #' Plot Selectivity Diagnostics
@@ -1446,41 +1449,42 @@ model_selectivity_plot <-
     stock_weight_limit = 4,
     fleet_labels = NULL
   ) {
-    res$fit |>
+    p1 <- res$fit |>
       rbya.sam() |>
       dplyr::group_by(year) |>
       dplyr::mutate(sel = f / max(f)) |>
       ggplot2::ggplot(ggplot2::aes(age, sel, col = as.ordered(year))) +
       ggplot2::geom_line() +
-      theme(legend.position = 'none') +
-      ggplot2::labs(x = 'Age', y = 'Selectivity') +
+      ggplot2::theme(legend.position = 'none') +
+      ggplot2::labs(x = 'Age', y = 'Selectivity')
 
-      res$fit |>
-        rbya.sam() |>
-        dplyr::group_by(year) |>
-        dplyr::mutate(sel = f / max(f)) |>
-        dplyr::filter(stock_weight < stock_weight_limit) |>
-        ggplot2::ggplot(ggplot2::aes(stock_weight, sel, col = as.ordered(year))) +
+    p2 <- res$fit |>
+      rbya.sam() |>
+      dplyr::group_by(year) |>
+      dplyr::mutate(sel = f / max(f)) |>
+      dplyr::filter(stock_weight < stock_weight_limit) |>
+      ggplot2::ggplot(ggplot2::aes(stock_weight, sel, col = as.ordered(year))) +
       ggplot2::geom_line() +
-      theme(legend.position = 'none') +
-      ggplot2::labs(x = 'Stock weight', y = '') +
+      ggplot2::theme(legend.position = 'none') +
+      ggplot2::labs(x = 'Stock weight', y = '')
 
-      annotated_par_table(res$fit) %>%
-        dplyr::filter(grepl('Fpar', par_name)) %>%
-        dplyr::mutate(
-          age = gsub('(.+)-.+', '\\1', age) %>% as.numeric(),
-          fleet = sam_default_fleet_label(fleet, labels = fleet_labels)
-        ) %>%
-        ggplot2::ggplot(ggplot2::aes(age, est)) +
+    p3 <- annotated_par_table(res$fit) |>
+      dplyr::filter(grepl('Fpar', par_name)) |>
+      dplyr::mutate(
+        age = gsub('(.+)-.+', '\\1', age) |> as.numeric(),
+        fleet = sam_default_fleet_label(fleet, labels = fleet_labels)
+      ) |>
+      ggplot2::ggplot(ggplot2::aes(age, est)) +
       ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
       ggplot2::facet_wrap(~fleet) +
       tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Survey catchability', x = 'Age') +
+      ggplot2::labs(y = 'Survey catchability', x = 'Age')
 
-      patchwork::plot_layout(
-        design = "AB
+    patchwork::wrap_plots(
+      A = p1, B = p2, C = p3,
+      design = "AB
 CC"
-      )
+    )
   }
 
 #' Plot Stock-Recruit Relationship with Uncertainty
