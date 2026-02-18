@@ -278,6 +278,10 @@ dashboard_app <- function(
     shiny::tabPanel(
       title = "Retro",
       shiny::plotOutput("retro_plot", height = "700px")
+    ),
+    shiny::tabPanel(
+      title = "Annotated Parameters",
+      shiny::tableOutput("annotated_par_table")
     )
   )
 
@@ -358,6 +362,14 @@ dashboard_app <- function(
       }
       model_retro_plot(bundle$res)
     })
+
+    output$annotated_par_table <- shiny::renderTable({
+      out <- try(annotated_par_table(bundle$res$fit), silent = TRUE)
+      if (inherits(out, "try-error")) {
+        return(data.frame(message = "Annotated parameter table unavailable"))
+      }
+      out
+    }, rownames = FALSE)
   }
 
   shiny::shinyApp(ui = ui, server = server)
