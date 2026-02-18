@@ -79,6 +79,57 @@ M_mat <- sam.input(
 # p_pres <- model_pres_resid_plot(list(process_res = safe_procres(fit)))
 ```
 
+### 4. Launch dashboard from `full_sam_fit()`
+
+```r
+library(SAMutils)
+library(stockassessment)
+
+d <- "testmore/nsher"
+cn <- read.ices(file.path(d, "cn.dat"))
+cw <- read.ices(file.path(d, "cw.dat"))
+dw <- read.ices(file.path(d, "dw.dat"))
+lf <- read.ices(file.path(d, "lf.dat"))
+lw <- read.ices(file.path(d, "lw.dat"))
+mo <- read.ices(file.path(d, "mo.dat"))
+nm <- read.ices(file.path(d, "nm.dat"))
+pf <- read.ices(file.path(d, "pf.dat"))
+pm <- read.ices(file.path(d, "pm.dat"))
+sw <- read.ices(file.path(d, "sw.dat"))
+surveys <- read.ices(file.path(d, "survey.dat"))
+
+dat <- setup.sam.data(
+  surveys = surveys,
+  residual.fleets = cn,
+  prop.mature = mo,
+  stock.mean.weight = sw,
+  catch.mean.weight = cw,
+  dis.mean.weight = dw,
+  land.mean.weight = lw,
+  prop.f = pf,
+  prop.m = pm,
+  natural.mortality = nm,
+  land.frac = lf
+)
+
+conf <- defcon(dat)
+conf$fbarRange <- c(2, 6)
+conf$corFlag <- 1
+conf$keyLogFpar <- matrix(
+  c(
+    -1,-1,-1,-1,-1,-1,-1,-1,-1,
+    -1, 0, 1, 2, 3, 4, 5, 6,-1,
+    -1, 7,-1,-1,-1,-1,-1,-1,-1,
+     8,-1,-1,-1,-1,-1,-1,-1,-1
+  ),
+  nrow = 4, byrow = TRUE
+)
+
+sam_fit <- full_sam_fit(dat, conf)
+app <- dashboard_app(sam_fit)
+shiny::runApp(app)
+```
+
 ## Main function groups
 
 - Input preparation: `sam.input()`, `format_SAM()`, `sam_build_data()`
