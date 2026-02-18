@@ -1308,34 +1308,43 @@ model_lik_plot <-
       cor_fit
     }
 
-    p1 <- annotated_par_table(cor_fit) |>
+    safe_param_plot <- function(dat, y_lab = "", x_lab = "Age", expand_zero = FALSE, empty_lab = "No data") {
+      if (nrow(dat) == 0) {
+        return(
+          ggplot2::ggplot() +
+            ggplot2::annotate("text", x = 0, y = 0, label = empty_lab) +
+            ggplot2::theme_void() +
+            ggplot2::labs(y = y_lab, x = x_lab)
+        )
+      }
+      p <- dat |>
+        ggplot2::ggplot(ggplot2::aes(age, est)) +
+        ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
+        ggplot2::facet_wrap(~fleet) +
+        tidypax::scale_col_crayola() +
+        ggplot2::labs(y = y_lab, x = x_lab)
+      if (isTRUE(expand_zero)) {
+        p <- p + ggplot2::expand_limits(y = 0)
+      }
+      p
+    }
+
+    d1 <- annotated_par_table(cor_fit) |>
       dplyr::filter(grepl('transfIRARdist', par_name)) |>
-      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
-      ggplot2::ggplot(ggplot2::aes(age, est)) +
-      ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
-      ggplot2::facet_wrap(~fleet) +
-      tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated correlation')
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric())
+    p1 <- safe_param_plot(d1, y_lab = 'Estimated correlation', empty_lab = "No correlation parameters")
 
-    p2 <- annotated_par_table(res$fit) |>
+    d2 <- annotated_par_table(res$fit) |>
       dplyr::filter(grepl('SdLogObs', par_name)) |>
-      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
-      ggplot2::ggplot(ggplot2::aes(age, est)) +
-      ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
-      ggplot2::facet_wrap(~fleet) +
-      tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated predvar link alpha')
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric())
+    p2 <- safe_param_plot(d2, y_lab = 'Estimated predvar link alpha', empty_lab = "No SdLogObs parameters")
 
-    p3 <- annotated_par_table(res$fit) |>
+    d3 <- annotated_par_table(res$fit) |>
       dplyr::filter(grepl('predVar', par_name)) |>
-      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric()) |>
-      ggplot2::ggplot(ggplot2::aes(age, est)) +
-      ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
-      ggplot2::facet_wrap(~fleet) +
-      tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Estimated predvar link alpha')
+      dplyr::mutate(age = gsub('(.+)-.+', '\\1', age) |> as.numeric())
+    p3 <- safe_param_plot(d3, y_lab = 'Estimated predvar link alpha', empty_lab = "No predVar parameters")
 
-    p4 <- annotated_par_table(res$fit) |>
+    d4 <- annotated_par_table(res$fit) |>
       dplyr::filter(grepl('LogN|Fsta_', par_name)) |>
       dplyr::mutate(
         fleet = dplyr::case_when(
@@ -1343,13 +1352,14 @@ model_lik_plot <-
           TRUE ~ 'sd(log(F))'
         ),
         age = gsub('(.+)-.+', '\\1', age) |> as.numeric()
-      ) |>
-      ggplot2::ggplot(ggplot2::aes(age, est)) +
-      ggplot2::geom_errorbar(ggplot2::aes(ymin = lower, ymax = upper)) +
-      ggplot2::facet_wrap(~fleet) +
-      ggplot2::expand_limits(y = 0) +
-      tidypax::scale_col_crayola() +
-      ggplot2::labs(y = 'Process variances', x = 'Age')
+      )
+    p4 <- safe_param_plot(
+      d4,
+      y_lab = 'Process variances',
+      x_lab = 'Age',
+      expand_zero = TRUE,
+      empty_lab = "No process-variance parameters"
+    )
 
     patchwork::wrap_plots(p1, p2, p3, p4, ncol = 1)
   }
