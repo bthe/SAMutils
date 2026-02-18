@@ -1,2 +1,2 @@
-# tidySAM
+# SAMutils
 Tidyverse spin on SAM
